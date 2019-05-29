@@ -38,30 +38,27 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
 
-  struct packet p;
+  struct packet client_pkt;
   int len, n;
-  n = recvfrom(sockfd, &p, sizeof(p), 0, (struct sockaddr *) &cli_addr, &len);
-  printf("%d", p.seq_num);
+  n = recvfrom(sockfd, &client_pkt, sizeof(client_pkt), 0, (struct sockaddr *) &cli_addr, &len);
+  printf("%d", client_pkt.seq_num);
 
-  struct packet syn_ack_p;
-  srand(time(0));
-  syn_ack_p.seq_num = rand() % 25600;
-  syn_ack_p.ack_num = p.seq_num + 1;
-  syn_ack_p.flags = (1 << 1) + 1;
-  if (sendto(sockfd, &syn_ack_p, sizeof(syn_ack_p), 0, (const struct sockaddr *) &cli_addr, 
-	     sizeof(cli_addr)) < 0) {
-    fprintf(stderr, "ERROR: Unable to send.");
-    exit(1);
+  if (client_pkt.flags == (1 << 1)) {
+    struct packet syn_ack_pkt;
+    srand(time(0));
+    syn_ack_pkt.seq_num = rand() % 25600;
+    syn_ack_pkt.ack_num = client_pkt.seq_num + 1;
+    syn_ack_pkt.flags = (1 << 1) + 1;
+    if (sendto(sockfd, &syn_ack_pkt, sizeof(syn_ack_pkt), 0, (const struct sockaddr *) &cli_addr, 
+	       sizeof(cli_addr)) < 0) {
+      fprintf(stderr, "ERROR: Unable to send.");
+      exit(1);
+    }
   }
 
-  /*  char* hello = "Hello from server.";
-  int len, n;
-  char buffer[1024];
-  n = recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *) &cli_addr, &len);
-  buffer[n] = '\0';
-  printf("Client : %s\n", buffer);
-  sendto(sockfd, (const char*)hello, strlen(hello), MSG_CONFIRM, (const struct sockaddr *) &cli_addr, len);
-  printf("Hello");*/
-  
+  struct packet new_pkt;
+  n = recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &len);
+  printf("%s\n", new_pkt.payload);
+
   return 0;
 }
