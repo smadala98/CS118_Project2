@@ -42,6 +42,18 @@ int main(int argc, char* argv[]) {
   int len, n;
   n = recvfrom(sockfd, &p, sizeof(p), 0, (struct sockaddr *) &cli_addr, &len);
   printf("%d", p.seq_num);
+
+  struct packet syn_ack_p;
+  srand(time(0));
+  syn_ack_p.seq_num = rand() % 25600;
+  syn_ack_p.ack_num = p.seq_num + 1;
+  syn_ack_p.flags = (1 << 1) + 1;
+  if (sendto(sockfd, &syn_ack_p, sizeof(syn_ack_p), 0, (const struct sockaddr *) &cli_addr, 
+	     sizeof(cli_addr)) < 0) {
+    fprintf(stderr, "ERROR: Unable to send.");
+    exit(1);
+  }
+
   /*  char* hello = "Hello from server.";
   int len, n;
   char buffer[1024];

@@ -50,10 +50,10 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "ERROR: Unable to send.");
     exit(1);
   }
-  /*  int len, n;
+  int len, n;
   struct packet response_packet;
   n = recvfrom(sockfd, &response_packet, sizeof(response_packet), 0, (struct sockaddr *) &serv_addr, &len);
-  printf("%d", response_packet.ack_num);*/
+  printf("%d", response_packet.ack_num);
   close(sockfd);
 }
 
