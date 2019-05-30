@@ -70,8 +70,9 @@ int main(int argc, char* argv[]) {
     data_pkt.ack_num = response_pkt.seq_num + 1;
     data_pkt.seq_num = syn_pkt.seq_num + 1;
     data_pkt.flags = 1;
+    // Need to figure out a better way of doing this so that extra data isn't sent in payload, may be due to packet struct.
     int bytes_read = fread(data_pkt.payload, 1, 511, fp);
-    data_pkt.payload[bytes_read] = 0;
+    data_pkt.payload[bytes_read] = '\0';
     if (sendto(sockfd, &data_pkt, sizeof(data_pkt), 0, (const struct sockaddr *) &serv_addr, 
 	       sizeof(serv_addr)) < 0) {
       fprintf(stderr, "ERROR: Unable to send.");
