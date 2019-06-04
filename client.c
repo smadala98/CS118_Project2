@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <time.h>
+#include <errno.h>
 
 struct packet {
   int seq_num;
@@ -16,10 +17,27 @@ struct packet {
   char payload[512];
 };
 
+struct packet* cwnd[512];
+int cwnd_index = 0;
+int end_index = 0;
+double cwnd_size = 1;
+double ssthresh = 10;
+
+void slide_window(int ack_received) {
+  for (int i = 0; i < cwnd_size; i++) {
+    if (cwnd[cwnd_index]->seq_num < ack_received) {
+      free(cwnd[cwnd_index]);
+      cwnd_index++;
+      i--;
+    }
+  }
+}
+
 int main(int argc, char* argv[]) {
   int sockfd;
   struct sockaddr_in serv_addr;
-
+  int serv_addr_len = sizeof(serv_addr);
+  
   if (argc != 4) {
     fprintf(stderr, "ERROR: Incorrect amount of arguments.");
     exit(1);
@@ -42,7 +60,7 @@ int main(int argc, char* argv[]) {
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_port = htons(atoi(argv[2]));
 
-  // Get host address.
+  // Get host address. TODO: If the argument given is IP address, need to add if statement to call gethostbyaddress.
   struct hostent* hp = gethostbyname(argv[1]);
   if (!hp) {
     fprintf(stderr, "ERROR: Host not reachable.");
@@ -50,41 +68,51 @@ int main(int argc, char* argv[]) {
   }
   memcpy((void *)&serv_addr.sin_addr, hp->h_addr_list[0], hp->h_length);
 
+  int cur_seq_num = 0;
+  int cur_ack_num = 0;
   // Send the first syn packet as first part of three-way handshake.
-  struct packet syn_pkt;
+  struct packet* syn_pkt = malloc(sizeof(struct packet));
   srand(time(0));  // Seeds based off current time.
-  syn_pkt.seq_num = rand() % 25600;  // Guarantees that seq_num does not exceed 25600.
-  syn_pkt.flags = (1 << 1);  // Sets SYN flag.
-  if (sendto(sockfd, &syn_pkt, sizeof(syn_pkt), 0, (const struct sockaddr *) &serv_addr, 
-	     sizeof(serv_addr)) < 0) {
+  syn_pkt->seq_num = rand() % 25600;  // Guarantees that seq_num does not exceed 25600.
+  cur_seq_num = syn_pkt->seq_num;
+  syn_pkt->ack_num = 0;
+  syn_pkt->flags = (1 << 1);  // Sets SYN flag.
+  if (sendto(sockfd, syn_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, 
+	     serv_addr_len) < 0) {
     fprintf(stderr, "ERROR: Unable to send.");
     exit(1);
   }
 
-  int len, n;
+  int set_index = 0;
+  while (!feof(fp)) {
+    cwnd[cwnd_index + set_index] = malloc(sizeof(struct packet));
+    memset(cwnd[cwnd_index + set_index]->payload, 0, 512);
+    fread(cwnd[cwnd_index + set_index]->payload, 1, 511, fp);
+    cwnd[cwnd_index + set_index]->seq_num = cur_seq_num + set_index + 1;
+    set_index++;
+  }
+  end_index = cwnd_index + set_index;
+
+
   struct packet response_pkt;
-  n = recvfrom(sockfd, &response_pkt, sizeof(response_pkt), 0, (struct sockaddr *) &serv_addr, &len);
+  recvfrom(sockfd, &response_pkt, sizeof(response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+  printf("%d, %d\n", response_pkt.seq_num, response_pkt.ack_num );
   // Check if three-way handshake has completed by check if SYN and ACK flags are set.
-  if (response_pkt.flags == (1 << 1) + 1) {
-    struct packet data_pkt;
-    data_pkt.ack_num = response_pkt.seq_num + 1;
-    data_pkt.seq_num = syn_pkt.seq_num + 1;
-    data_pkt.flags = 1;
-    // Need to figure out a better way of doing this so that extra data isn't sent in payload, may be due to packet struct.
-    int bytes_read = fread(data_pkt.payload, 1, 511, fp);
-    data_pkt.payload[bytes_read] = '\0';
-    if (sendto(sockfd, &data_pkt, sizeof(data_pkt), 0, (const struct sockaddr *) &serv_addr, 
-	       sizeof(serv_addr)) < 0) {
-      fprintf(stderr, "ERROR: Unable to send.");
-      exit(1);
+  if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
+    cur_ack_num = response_pkt.seq_num + 1;
+    while (cwnd_index != end_index) {
+      slide_window(response_pkt.ack_num);
+      cwnd[cwnd_index]->ack_num = cur_ack_num;
+      cwnd[cwnd_index]->flags = 1;
+      if (sendto(sockfd, cwnd[cwnd_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, 
+		 serv_addr_len) < 0) {
+	fprintf(stderr, "ERROR: Unable to send.");
+	exit(1);
+      }
+      cwnd_index++;
     }
-    
-    //while (!feof(fp)) {
-    //int num_chars = fread(
-    //}
   }
 
-  
   close(sockfd);
 }
 

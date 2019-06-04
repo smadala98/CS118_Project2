@@ -22,6 +22,7 @@ int main(int argc, char* argv[]) {
   int sockfd;
   struct sockaddr_in serv_addr, cli_addr;
   int cli_addr_len = sizeof(cli_addr);
+  srand(time(0));
   
   if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
     fprintf(stderr, "Unable to create socket file descriptor.");
@@ -40,16 +41,17 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
 
+  int cur_seq_num = 0;
   struct packet client_pkt;
   recvfrom(sockfd, &client_pkt, sizeof(client_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
-  printf("%d\n", client_pkt.seq_num);
+  printf("%d, %d\n", client_pkt.seq_num, client_pkt.ack_num);
 
   int conn_num = 0;
   if (client_pkt.flags == (1 << 1)) {
     conn_num++;
     struct packet syn_ack_pkt;
-    srand(time(0));
     syn_ack_pkt.seq_num = rand() % 25600;
+    cur_seq_num = syn_ack_pkt.seq_num;
     syn_ack_pkt.ack_num = client_pkt.seq_num + 1;
     syn_ack_pkt.flags = (1 << 1) + 1;
     if (sendto(sockfd, &syn_ack_pkt, sizeof(syn_ack_pkt), 0, (const struct sockaddr *) &cli_addr, 
@@ -59,11 +61,13 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  struct packet new_pkt;
-  recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
   char filename[16];
   sprintf(filename, "%d.file", conn_num);
   FILE* fp = fopen(filename, "w+");
+
+  // Need to put this in a loop to receive multiple packets from client.
+  struct packet new_pkt;
+  recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
   fwrite(new_pkt.payload, sizeof(char), sizeof(new_pkt.payload), fp);
 
   return 0;
