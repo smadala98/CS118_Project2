@@ -100,14 +100,14 @@ int main(int argc, char* argv[]) {
   recvfrom(sockfd, &response_pkt, sizeof(response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
   printf("%d, %d\n", response_pkt.seq_num, response_pkt.ack_num );
   // Check if three-way handshake has completed by check if SYN and ACK flags are set.
+
   if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
     cur_ack_num = response_pkt.seq_num + 1;
     while (cwnd_index != end_index) {
       slide_window(response_pkt.ack_num);
       cwnd[cwnd_index]->ack_num = cur_ack_num;
       cwnd[cwnd_index]->flags = 1;
-      if (sendto(sockfd, cwnd[cwnd_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
-		  serv_addr_len) < 0) {
+      if (sendto(sockfd, cwnd[cwnd_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
 	    fprintf(stderr, "ERROR: Unable to send.");
 	    exit(1);
       }
@@ -116,25 +116,52 @@ int main(int argc, char* argv[]) {
   }
 
   struct packet* fin_pkt = malloc(sizeof(struct packet));
-  fin_pkt->seq_num = cur_ack_num + 524;
-  fin_pkt->ack_num = cur_ack_num + 524;
-  fin_pkt->flags = (1 << 1);
-  fin_pkt->FIN=1;
-  fin_pkt->FIN_ACK=0;
+  fin_pkt->seq_num = cwnd[cwnd_index - 1]->seq_num + 1; //cur_ack_num + 524;
+  fin_pkt->ack_num = 0;
+  fin_pkt->flags = (1 << 2);
+  //  fin_pkt->FIN=1;
+  //  fin_pkt->FIN_ACK=0;
   if (sendto(sockfd, fin_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
 	     serv_addr_len) < 0) {
     fprintf(stderr, "ERROR: Unable to send.");
     exit(1);
   }
 
-  while(1){
-    struct packet fin_ack_pkt;
-    recvfrom(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
-    if (fin_ack_pkt.FIN == 1 && fin_ack_pkt.FIN_ACK == 1){
+  struct packet srv_fin_ack_pkt;
+  recvfrom(sockfd, &srv_fin_ack_pkt, sizeof(srv_fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+  if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == fin_pkt->seq_num + 1) {
+    time_t cur_time = time(NULL);
+    while(time(NULL) - cur_time < 2){
+      struct packet srv_fin_pkt;
+      recvfrom(sockfd, &srv_fin_pkt, sizeof(srv_fin_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+      if (srv_fin_pkt.flags == (1 << 2)/*fin_ack_pkt.FIN == 1 && fin_ack_pkt.FIN_ACK == 1*/){
+	struct packet* fin_ack_pkt = malloc(sizeof(struct packet));
+	fin_ack_pkt->seq_num = fin_pkt->seq_num + 1;
+	printf("%d\n", fin_ack_pkt->seq_num);
+	fin_ack_pkt->ack_num = srv_fin_pkt.seq_num + 1;
+	printf("%d\n", fin_ack_pkt->ack_num);
+	fin_ack_pkt->flags = 1;
+	//fin_ack_pkt->FIN=1;
+	//fin_ack_pkt->FIN_ACK=1;
+	if (sendto(sockfd, fin_ack_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
+		   serv_addr_len) < 0) {
+	  fprintf(stderr, "ERROR: Unable to send.");
+	  exit(1);
+	}
+      }
+    }
+    
+  }
+
+  /*  time_t cur_time = time(NULL);
+  while(time(NULL) - cur_time < 2){
+    struct packet srv_fin_ack_pkt;
+    recvfrom(sockfd, &srv_fin_ack_pkt, sizeof(srv_fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+    if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == cur_ack_num + 525/*fin_ack_pkt.FIN == 1 && fin_ack_pkt.FIN_ACK == 1){
       struct packet* fin_pkt = malloc(sizeof(struct packet));
       fin_pkt->seq_num = cur_ack_num + 524;
       fin_pkt->ack_num = cur_ack_num + 524;
-      fin_pkt->flags = (1 << 1);
+      fin_pkt->flags = (1 << 2);
       fin_pkt->FIN=1;
       fin_pkt->FIN_ACK=1;
       if (sendto(sockfd, fin_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
@@ -144,8 +171,8 @@ int main(int argc, char* argv[]) {
       }
       break;
     }
-  }
-  sleep(3);
+  }*/
+  //  sleep(3);
 
   close(sockfd);
 }
