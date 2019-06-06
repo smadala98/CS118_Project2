@@ -16,6 +16,8 @@ struct packet {
   int ack_num;
   int flags; // 1st bit is set for ACK, 2nd bit is set for SYN, 3rd bit is set for FIN
   char payload[512];
+  int FIN;
+  int FIN_ACK;
 };
 
 int main(int argc, char* argv[]) {
@@ -23,7 +25,7 @@ int main(int argc, char* argv[]) {
   struct sockaddr_in serv_addr, cli_addr;
   int cli_addr_len = sizeof(cli_addr);
   srand(time(0));
-  
+
   if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
     fprintf(stderr, "Unable to create socket file descriptor.");
     exit(1);
@@ -54,7 +56,7 @@ int main(int argc, char* argv[]) {
     cur_seq_num = syn_ack_pkt.seq_num;
     syn_ack_pkt.ack_num = client_pkt.seq_num + 1;
     syn_ack_pkt.flags = (1 << 1) + 1;
-    if (sendto(sockfd, &syn_ack_pkt, sizeof(syn_ack_pkt), 0, (const struct sockaddr *) &cli_addr, 
+    if (sendto(sockfd, &syn_ack_pkt, sizeof(syn_ack_pkt), 0, (const struct sockaddr *) &cli_addr,
 	       cli_addr_len) < 0) {
       fprintf(stderr, "ERROR: Unable to send.\n");
       exit(1);
@@ -66,9 +68,35 @@ int main(int argc, char* argv[]) {
   FILE* fp = fopen(filename, "w+");
 
   // Need to put this in a loop to receive multiple packets from client.
-  struct packet new_pkt;
-  recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
-  fwrite(new_pkt.payload, sizeof(char), sizeof(new_pkt.payload), fp);
+  while(1){
+    struct packet new_pkt;
+    recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+    if (new_pkt.FIN == 1 && new_pkt.FIN_ACK==0){
+      struct packet fin_ack_pkt;
+      fin_ack_pkt.seq_num = 524;
+      fin_ack_pkt.ack_num = 524;
+      fin_ack_pkt.flags = (1 << 1) + 1;
+      fin_ack_pkt.FIN=1;
+      fin_ack_pkt.FIN_ACK=1;
+      if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr,
+  	       cli_addr_len) < 0) {
+        fprintf(stderr, "ERROR: Unable to send.\n");
+        exit(1);
+      }
+    }
+    else if (new_pkt.FIN == 1 && new_pkt.FIN_ACK==1)
+    {
+      break;
+    }
+    int payload_len=0;
+    while(1){
+      if(new_pkt.payload[payload_len] == NULL){
+        break;
+      }
+      payload_len++;
+    }
+    fwrite(new_pkt.payload, sizeof(char), payload_len, fp);
+  }
 
   return 0;
 }
