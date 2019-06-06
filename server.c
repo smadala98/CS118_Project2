@@ -19,8 +19,10 @@ struct packet {
   int FIN;
   int FIN_ACK;
 };
+int conn_num = 0;
 
 int main(int argc, char* argv[]) {
+
   int sockfd;
   struct sockaddr_in serv_addr, cli_addr;
   int cli_addr_len = sizeof(cli_addr);
@@ -42,61 +44,59 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "Unable to bind socket.");
     exit(1);
   }
-
-  int cur_seq_num = 0;
-  struct packet client_pkt;
-  recvfrom(sockfd, &client_pkt, sizeof(client_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
-  printf("%d, %d\n", client_pkt.seq_num, client_pkt.ack_num);
-
-  int conn_num = 0;
-  if (client_pkt.flags == (1 << 1)) {
-    conn_num++;
-    struct packet syn_ack_pkt;
-    syn_ack_pkt.seq_num = rand() % 25600;
-    cur_seq_num = syn_ack_pkt.seq_num;
-    syn_ack_pkt.ack_num = client_pkt.seq_num + 1;
-    syn_ack_pkt.flags = (1 << 1) + 1;
-    if (sendto(sockfd, &syn_ack_pkt, sizeof(syn_ack_pkt), 0, (const struct sockaddr *) &cli_addr,
-	       cli_addr_len) < 0) {
-      fprintf(stderr, "ERROR: Unable to send.\n");
-      exit(1);
-    }
-  }
-
-  char filename[16];
-  sprintf(filename, "%d.file", conn_num);
-  FILE* fp = fopen(filename, "w+");
-
-  // Need to put this in a loop to receive multiple packets from client.
   while(1){
-    struct packet new_pkt;
-    recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
-    if (new_pkt.FIN == 1 && new_pkt.FIN_ACK==0){
-      struct packet fin_ack_pkt;
-      fin_ack_pkt.seq_num = 524;
-      fin_ack_pkt.ack_num = 524;
-      fin_ack_pkt.flags = (1 << 1) + 1;
-      fin_ack_pkt.FIN=1;
-      fin_ack_pkt.FIN_ACK=1;
-      if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr,
-  	       cli_addr_len) < 0) {
-        fprintf(stderr, "ERROR: Unable to send.\n");
-        exit(1);
+    int cur_seq_num = 0;
+    struct packet client_pkt;
+    recvfrom(sockfd, &client_pkt, sizeof(client_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+    printf("%d, %d\n", client_pkt.seq_num, client_pkt.ack_num);
+
+    if (client_pkt.flags == (1 << 1)) {
+      conn_num++;
+      struct packet syn_ack_pkt;
+      syn_ack_pkt.seq_num = rand() % 25600;
+      cur_seq_num = syn_ack_pkt.seq_num;
+      syn_ack_pkt.ack_num = client_pkt.seq_num + 1;
+      syn_ack_pkt.flags = (1 << 1) + 1;
+      if (sendto(sockfd, &syn_ack_pkt, sizeof(syn_ack_pkt), 0, (const struct sockaddr *) &cli_addr,
+	         cli_addr_len) < 0) {
+             fprintf(stderr, "ERROR: Unable to send.\n");
+             exit(1);
+           }
       }
-    }
-    else if (new_pkt.FIN == 1 && new_pkt.FIN_ACK==1)
-    {
-      break;
-    }
-    int payload_len=0;
+
+    char filename[16];
+    sprintf(filename, "%d.file", conn_num);
+    FILE* fp = fopen(filename, "w+");
+
+    // Need to put this in a loop to receive multiple packets from client.
     while(1){
-      if(new_pkt.payload[payload_len] == NULL){
+      struct packet new_pkt;
+      recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+      if (new_pkt.FIN == 1 && new_pkt.FIN_ACK==0){
+        struct packet fin_ack_pkt;
+        fin_ack_pkt.seq_num = 524;
+        fin_ack_pkt.ack_num = 524;
+        fin_ack_pkt.flags = (1 << 1) + 1;
+        fin_ack_pkt.FIN=1;
+        fin_ack_pkt.FIN_ACK=1;
+        if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
+              fprintf(stderr, "ERROR: Unable to send.\n");
+              exit(1);
+        }
+      }
+      else if (new_pkt.FIN == 1 && new_pkt.FIN_ACK==1)
+      {
         break;
       }
-      payload_len++;
+      int payload_len=0;
+      while(1) {
+        if(new_pkt.payload[payload_len] == NULL){
+          break;
+        }
+        payload_len++;
+      }
+      fwrite(new_pkt.payload, sizeof(char), payload_len, fp);
     }
-    fwrite(new_pkt.payload, sizeof(char), payload_len, fp);
+    fclose(fp);
   }
-
-  return 0;
 }
