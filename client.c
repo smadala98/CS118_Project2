@@ -15,8 +15,6 @@ struct packet {
   int ack_num;
   int flags; // If ACK 1st bit is set, SYN 2nd bit is set, FIN 3rd bit is set
   char payload[512];
-  int FIN;
-  int FIN_ACK;
 };
 
 struct packet* cwnd[512];
@@ -152,27 +150,6 @@ int main(int argc, char* argv[]) {
     }
     
   }
-
-  /*  time_t cur_time = time(NULL);
-  while(time(NULL) - cur_time < 2){
-    struct packet srv_fin_ack_pkt;
-    recvfrom(sockfd, &srv_fin_ack_pkt, sizeof(srv_fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
-    if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == cur_ack_num + 525/*fin_ack_pkt.FIN == 1 && fin_ack_pkt.FIN_ACK == 1){
-      struct packet* fin_pkt = malloc(sizeof(struct packet));
-      fin_pkt->seq_num = cur_ack_num + 524;
-      fin_pkt->ack_num = cur_ack_num + 524;
-      fin_pkt->flags = (1 << 2);
-      fin_pkt->FIN=1;
-      fin_pkt->FIN_ACK=1;
-      if (sendto(sockfd, fin_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
-    	     serv_addr_len) < 0) {
-        fprintf(stderr, "ERROR: Unable to send.");
-        exit(1);
-      }
-      break;
-    }
-  }*/
-  //  sleep(3);
 
   close(sockfd);
 }

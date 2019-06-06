@@ -16,8 +16,6 @@ struct packet {
   int ack_num;
   int flags; // 1st bit is set for ACK, 2nd bit is set for SYN, 3rd bit is set for FIN
   char payload[512];
-  int FIN;
-  int FIN_ACK;
 };
 int conn_num = 0;
 
