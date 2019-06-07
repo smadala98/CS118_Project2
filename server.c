@@ -113,20 +113,25 @@ int main(int argc, char* argv[]) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
-	      // Create FIN packet for server to send to client.
-	      fin_ack_pkt.ack_num = 0;
-	      // Set FIN bit.
-	      fin_ack_pkt.flags = (1 << 2);
+	// Create FIN packet for server to send to client.
+	fin_ack_pkt.ack_num = 0;
+	// Set FIN bit.
+	fin_ack_pkt.flags = (1 << 2);
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
 
-      } else if (new_pkt.flags == ((1 << 2)+ 1)) {
-        break;
+	// Need to receive FIN ACK from client.
+	recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+	// Add timer here, once FIN ACK is received, server can end connection.
+	if (new_pkt.flags == 1 && new_pkt.ack_num == fin_ack_pkt.seq_num + 1) {
+	  break;
+	}
       }
 
       int payload_len=0;
+      printf("%s\n", new_pkt.payload);
       while(1) {
         if(new_pkt.payload[payload_len] == 0){
           break;
