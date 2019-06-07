@@ -48,12 +48,14 @@ int main(int argc, char* argv[]) {
     recvfrom(sockfd, &client_pkt, sizeof(client_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
     printf("%d, %d\n", client_pkt.seq_num, client_pkt.ack_num);
 
+    // Check if SYN bit is set.
     if (client_pkt.flags == (1 << 1)) {
       conn_num++;
       struct packet syn_ack_pkt;
       syn_ack_pkt.seq_num = rand() % 25600;
       cur_seq_num = syn_ack_pkt.seq_num;
       syn_ack_pkt.ack_num = client_pkt.seq_num + 1;
+      // Set SYN and ACK bit.
       syn_ack_pkt.flags = (1 << 1) + 1;
       if (sendto(sockfd, &syn_ack_pkt, sizeof(syn_ack_pkt), 0, (const struct sockaddr *) &cli_addr,
 	         cli_addr_len) < 0) {
@@ -71,17 +73,21 @@ int main(int argc, char* argv[]) {
       struct packet new_pkt;
       recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
 
+      // Check if received FIN bit.
       if (new_pkt.flags == (1 << 2)){
         struct packet fin_ack_pkt;
 	cur_seq_num++;
         fin_ack_pkt.seq_num = cur_seq_num;
         fin_ack_pkt.ack_num = new_pkt.seq_num + 1;
+	// Set ACK for FIN packet sent from client.
         fin_ack_pkt.flags = 1;
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
+	// Create FIN packet for server to send to client.
 	fin_ack_pkt.ack_num = 0;
+	// Set FIN bit.
 	fin_ack_pkt.flags = (1 << 2);
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
@@ -98,6 +104,7 @@ int main(int argc, char* argv[]) {
       }
       fwrite(new_pkt.payload, sizeof(char), payload_len, fp);
       cur_seq_num++;
+      // Send ACK packet for the client packet received to the client.
       struct packet ack_pkt;
       ack_pkt.seq_num = cur_seq_num;
       ack_pkt.ack_num = new_pkt.seq_num + 1;
