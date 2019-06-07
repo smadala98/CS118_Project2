@@ -10,7 +10,7 @@
 #include <netdb.h>
 #include <sys/time.h>
 #include <errno.h>
-
+#include <signal.h>
 struct packet {
   int seq_num;
   int ack_num;
@@ -18,8 +18,21 @@ struct packet {
   char payload[512];
 };
 int conn_num = 0;
+FILE* fp;
+
+void sig_handler(int signo)
+{
+  if (signo == SIGINT){
+    fclose(fp);
+    exit(0);
+  }
+
+}
 
 int main(int argc, char* argv[]) {
+
+  if (signal(SIGINT, sig_handler) == SIG_ERR){
+  }
 
   int sockfd;
   struct sockaddr_in serv_addr, cli_addr;
@@ -27,7 +40,7 @@ int main(int argc, char* argv[]) {
   srand(time(0));
 
   if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-    fprintf(stderr, "Unable to create socket file descriptor.");
+    fprintf(stderr, "ERROR: Unable to create socket file descriptor.");
     exit(1);
   }
 
@@ -39,7 +52,7 @@ int main(int argc, char* argv[]) {
   serv_addr.sin_port = htons(atoi(argv[1]));
 
   if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-    fprintf(stderr, "Unable to bind socket.");
+    fprintf(stderr, "ERROR: Unable to bind socket.");
     exit(1);
   }
   while(1){
@@ -59,12 +72,12 @@ int main(int argc, char* argv[]) {
 	         cli_addr_len) < 0) {
              fprintf(stderr, "ERROR: Unable to send.\n");
              exit(1);
-           }
-      }
+          }
+    }
 
     char filename[16];
     sprintf(filename, "%d.file", conn_num);
-    FILE* fp = fopen(filename, "w+");
+    fp = fopen(filename, "w+");
 
     // Need to put this in a loop to receive multiple packets from client.
     while(1) {
@@ -73,7 +86,7 @@ int main(int argc, char* argv[]) {
 
       if (new_pkt.flags == (1 << 2)){
         struct packet fin_ack_pkt;
-	cur_seq_num++;
+	      cur_seq_num++;
         fin_ack_pkt.seq_num = cur_seq_num;
         fin_ack_pkt.ack_num = new_pkt.seq_num + 1;
         fin_ack_pkt.flags = 1;
@@ -81,14 +94,15 @@ int main(int argc, char* argv[]) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
-	fin_ack_pkt.ack_num = 0;
-	fin_ack_pkt.flags = (1 << 2);
+	      fin_ack_pkt.ack_num = 0;
+	      fin_ack_pkt.flags = (1 << 2);
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
-	break;
+	       break;
       }
+
       int payload_len=0;
       while(1) {
         if(new_pkt.payload[payload_len] == 0){
@@ -102,10 +116,9 @@ int main(int argc, char* argv[]) {
       ack_pkt.seq_num = cur_seq_num;
       ack_pkt.ack_num = new_pkt.seq_num + 1;
       if (sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
-	fprintf(stderr, "ERROR: Unable to send.\n");
-	exit(1);
+	     fprintf(stderr, "ERROR: Unable to send.\n");
+	     exit(1);
       }
-      
     }
     fclose(fp);
   }
