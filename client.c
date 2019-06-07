@@ -20,7 +20,7 @@ struct packet {
 
 struct packet* cwnd[51200000]; // make this larger enough to prevent bus error when transforming large files
 int cwnd_index = 0;
-int un_acked_index = 0;
+int not_sent_index = 0;
 int end_index = 0;
 double cwnd_size = 1;
 double cwnd_size_h = 0;
@@ -123,14 +123,14 @@ int main(int argc, char* argv[]) {
     //    int dupacks=0;
     // Using un_acked_index prevents sending of duplicate ACKs, due to queuing of ACKs from server.
     while (cwnd_index != end_index) {
-      for(; un_acked_index < cwnd_index + cwnd_size; un_acked_index++){
-	if (un_acked_index == end_index)
+      for(; not_sent_index < cwnd_index + cwnd_size; not_sent_index++){
+	if (not_sent_index == end_index)
 	  break;
 	
-        cwnd[un_acked_index]->ack_num = cur_ack_num;
-        cwnd[un_acked_index]->flags = 1;
-	final_seq_num = cwnd[un_acked_index]->seq_num;
-        if (sendto(sockfd, cwnd[un_acked_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
+        cwnd[not_sent_index]->ack_num = cur_ack_num;
+        cwnd[not_sent_index]->flags = 1;
+	final_seq_num = cwnd[not_sent_index]->seq_num;
+        if (sendto(sockfd, cwnd[not_sent_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
   	    fprintf(stderr, "ERROR: Unable to send packet.");
   	    exit(1);
         }
