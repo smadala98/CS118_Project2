@@ -32,12 +32,11 @@ void slide_window(int ack_received) {
       break;
     if (cwnd[cwnd_index]->seq_num < ack_received) {
       if (cwnd[cwnd_index]->seq_num == ack_received - 1) {
-	// Increments cwnd.
+	// Fr
 	if (cwnd_size < ssthresh) {
 	  cwnd_size++;
 	} else {
 	  cwnd_size_h += (double)1/cwnd_size;
-	  // Have to compare this way due to floating point error.
 	  if (fabs(cwnd_size_h - 1) < 0.0001) {
 	    cwnd_size++;
 	    cwnd_size_h = 0;
@@ -119,9 +118,8 @@ int main(int argc, char* argv[]) {
 
   if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
     cur_ack_num = response_pkt.seq_num + 1;
-    //    int doneseq=0;
-    //    int dupacks=0;
-    // Using un_acked_index prevents sending of duplicate ACKs, due to queuing of ACKs from server.
+    int doneseq=0;
+    int dupacks=0;
     while (cwnd_index != end_index) {
       for(; un_acked_index < cwnd_index + cwnd_size; un_acked_index++){
 	if (un_acked_index == end_index)
@@ -139,8 +137,7 @@ int main(int argc, char* argv[]) {
       recvfrom(sockfd, &ack_response_pkt, sizeof(ack_response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
       printf("%d, %d", ack_response_pkt.seq_num, ack_response_pkt.ack_num );
       slide_window(ack_response_pkt.ack_num);
-      
-      /*if (ack_response_pkt.ack_num == doneseq+1){
+      if (ack_response_pkt.ack_num == doneseq+1){
          doneseq++;
          if (cwnd_size <= ssthresh){
            cwnd_size++;
@@ -162,7 +159,7 @@ int main(int argc, char* argv[]) {
     	       exit(1);
           }
         }
-	}*/
+      }
       printf(" cwnd = %f, cwnd_size_h = %f\n", cwnd_size, cwnd_size_h);
     }
   }
