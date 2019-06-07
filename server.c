@@ -17,6 +17,7 @@ struct packet {
   int flags; // 1st bit is set for ACK, 2nd bit is set for SYN, 3rd bit is set for FIN
   char payload[512];
 };
+int if_file_close=0;
 int conn_num = 0;
 FILE* fp;
 
@@ -24,10 +25,11 @@ void sig_handler(int signo)
 {
   if (signo == SIGINT){
     fprintf(stderr, "");
-    fclose(fp);
+    if (if_file_close==0){
+      fclose(fp);
+    }
     exit(0);
   }
-
 }
 
 int main(int argc, char* argv[]) {
@@ -58,6 +60,7 @@ int main(int argc, char* argv[]) {
   }
   while(1){
     int cur_seq_num = 0;
+    if_file_close=0;
     struct packet client_pkt;
     recvfrom(sockfd, &client_pkt, sizeof(client_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
     printf("%d, %d\n", client_pkt.seq_num, client_pkt.ack_num);
@@ -65,6 +68,7 @@ int main(int argc, char* argv[]) {
     // Check if SYN bit is set.
     if (client_pkt.flags == (1 << 1)) {
       conn_num++;
+      if_file_close=0;
       struct packet syn_ack_pkt;
       syn_ack_pkt.seq_num = rand() % 25600;
       cur_seq_num = syn_ack_pkt.seq_num;
@@ -85,7 +89,17 @@ int main(int argc, char* argv[]) {
     // Need to put this in a loop to receive multiple packets from client.
     while(1) {
       struct packet new_pkt;
-      recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+      struct timeval timeout = {10, 0};
+      fd_set in_set;
+
+      FD_ZERO(&in_set);
+      FD_SET(sockfd, &in_set);
+      int cnt = select(sockfd + 1, &in_set, NULL, NULL, &timeout);
+      if(FD_ISSET(sockfd, &in_set)){
+        recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+      } else {
+        break;
+      }
 
       // Check if received FIN bit.
       if (new_pkt.flags == (1 << 2)){
@@ -108,7 +122,7 @@ int main(int argc, char* argv[]) {
               exit(1);
         }
 
-      } else if (new_pkt.flags == (1 << 2 + 1)) {
+      } else if (new_pkt.flags == ((1 << 2)+ 1)) {
         break;
       }
 
@@ -131,5 +145,6 @@ int main(int argc, char* argv[]) {
       }
     }
     fclose(fp);
+    if_file_close=1;
   }
 }

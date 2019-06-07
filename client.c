@@ -169,7 +169,7 @@ int main(int argc, char* argv[]) {
 	       printf("%d,", fin_ack_pkt->seq_num);
 	       fin_ack_pkt->ack_num = srv_fin_pkt.seq_num + 1;
 	       printf(" %d\n", fin_ack_pkt->ack_num);
-	       fin_ack_pkt->flags = 1 << 2 + 1;
+	       fin_ack_pkt->flags = (1 << 2) + 1;
 	       //fin_ack_pkt->FIN=1;
 	       //fin_ack_pkt->FIN_ACK=1;
 	       if (sendto(sockfd, fin_ack_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
