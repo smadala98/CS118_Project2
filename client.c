@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
     cur_ack_num = response_pkt.seq_num + 1;
     //    int doneseq=0;
     //    int dupacks=0;
-    // Using un_acked_index prevents sending of duplicate ACKs, due to queuing of ACKs from server.
+    // Using not_sent_index prevents sending of duplicate packets, due to queuing of ACKs from server.
     while (cwnd_index != end_index) {
       for(; not_sent_index < cwnd_index + cwnd_size; not_sent_index++){
 	if (not_sent_index == end_index)
