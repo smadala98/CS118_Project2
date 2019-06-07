@@ -115,8 +115,8 @@ int main(int argc, char* argv[]) {
   struct packet response_pkt;
   recvfrom(sockfd, &response_pkt, sizeof(response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
   printf("%d, %d\n", response_pkt.seq_num, response_pkt.ack_num );
+  int final_seq_num = 0;
   // Check if three-way handshake has completed by check if SYN and ACK flags are set.
-
   if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
     cur_ack_num = response_pkt.seq_num + 1;
     //    int doneseq=0;
@@ -129,6 +129,7 @@ int main(int argc, char* argv[]) {
 	
         cwnd[un_acked_index]->ack_num = cur_ack_num;
         cwnd[un_acked_index]->flags = 1;
+	final_seq_num = cwnd[un_acked_index]->seq_num;
         if (sendto(sockfd, cwnd[un_acked_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
   	    fprintf(stderr, "ERROR: Unable to send packet.");
   	    exit(1);
@@ -168,7 +169,8 @@ int main(int argc, char* argv[]) {
   }
   
   struct packet* fin_pkt = malloc(sizeof(struct packet));
-  fin_pkt->seq_num = cwnd[cwnd_index - 1]->seq_num + 1;
+  cur_seq_num++;
+  fin_pkt->seq_num = final_seq_num;
   fin_pkt->ack_num = 0;
   fin_pkt->flags = (1 << 2);
 
