@@ -23,7 +23,7 @@ FILE* fp;
 
 void sig_handler(int signo)
 {
-  if (signo == SIGINT){
+  if (signo == SIGQUIT){
     fprintf(stderr, "");
     if (if_file_close==0){
       fclose(fp);
@@ -34,7 +34,7 @@ void sig_handler(int signo)
 
 int main(int argc, char* argv[]) {
 
-  if (signal(SIGINT, sig_handler) == SIG_ERR){
+  if (signal(SIGQUIT, sig_handler) == SIG_ERR){
   }
 
   int sockfd;
@@ -113,21 +113,21 @@ int main(int argc, char* argv[]) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
-	// Create FIN packet for server to send to client.
-	fin_ack_pkt.ack_num = 0;
-	// Set FIN bit.
-	fin_ack_pkt.flags = (1 << 2);
+	      // Create FIN packet for server to send to client.
+	      fin_ack_pkt.ack_num = 0;
+	      // Set FIN bit.
+	      fin_ack_pkt.flags = (1 << 2);
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
 
-	// Need to receive FIN ACK from client.
-	recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
-	// Add timer here, once FIN ACK is received, server can end connection.
-	if (new_pkt.flags == 1 && new_pkt.ack_num == fin_ack_pkt.seq_num + 1) {
-	  break;
-	}
+	      // Need to receive FIN ACK from client.
+	      recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+	      // Add timer here, once FIN ACK is received, server can end connection.
+	      if (new_pkt.flags == 1 && new_pkt.ack_num == fin_ack_pkt.seq_num + 1) {
+	         break;
+	      }
       }
 
       int payload_len=0;
