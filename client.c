@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
   syn_pkt->flags = (1 << 1);  // Sets SYN flag.
   if (sendto(sockfd, syn_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
 	     serv_addr_len) < 0) {
-    fprintf(stderr, "ERROR: Unable to send.");
+    fprintf(stderr, "ERROR: Unable to send handshake.");
     exit(1);
   }
 
@@ -102,29 +102,44 @@ int main(int argc, char* argv[]) {
 
   if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
     cur_ack_num = response_pkt.seq_num + 1;
-
+    int doneseq=0;
+    int dupacks=0;
     while (cwnd_index != end_index) {
       for(int i=cwnd_index; i <cwnd_index+cwnd_size; i++){
-        cwnd[cwnd_index]->ack_num = cur_ack_num;
-        cwnd[cwnd_index]->flags = 1;
+        cwnd[i]->ack_num = cur_ack_num;
+        cwnd[i]->flags = 1;
         if (sendto(sockfd, cwnd[i], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
-  	    fprintf(stderr, "ERROR: Unable to send.");
+  	    fprintf(stderr, "ERROR: Unable to send packet.");
   	    exit(1);
         }
       }
       cwnd_index+=cwnd_size;
-      struct packet new_response_pkt;
-      recvfrom(sockfd, &new_response_pkt, sizeof(new_response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
-      printf("%d, %d\n", new_response_pkt.seq_num, new_response_pkt.ack_num );
-      if (cwnd_size <= ssthresh){
-        cwnd_size++;
-      }else{
-        cwnd_size_h+=1/(double)ssthresh;
-        if (cwnd_size_h==1){
-          cwnd_size++;
-          cwnd_size_h=0;
+      struct packet ack_response_pkt;
+      recvfrom(sockfd, &ack_response_pkt, sizeof(ack_response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+      printf("%d, %d\n", ack_response_pkt.seq_num, ack_response_pkt.ack_num );
+      //slide_window(ack_response_pkt.ack_num);
+      if (ack_response_pkt.ack_num == doneseq+1){
+         doneseq++;
+         if (cwnd_size <= ssthresh){
+           cwnd_size++;
+         }else{
+           cwnd_size_h+=(double)(1/ssthresh);
+           if (cwnd_size_h==1){
+             cwnd_size++;
+             cwnd_size_h=0;
+           }
+         }
+      } else if (ack_response_pkt.ack_num == doneseq){
+        dupacks++;
+        if (dupacks == 2){
+          ssthresh=(int)(ssthresh/2);
+          cwnd[doneseq+1]->ack_num = doneseq+1;
+          cwnd[doneseq+1]->flags = 1;
+          if (sendto(sockfd, cwnd[doneseq+1], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
+    	       fprintf(stderr, "ERROR: Unable to send packet.");
+    	       exit(1);
+          }
         }
-
       }
     }
   }
@@ -137,7 +152,7 @@ int main(int argc, char* argv[]) {
   //  fin_pkt->FIN_ACK=0;
   if (sendto(sockfd, fin_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
 	     serv_addr_len) < 0) {
-    fprintf(stderr, "ERROR: Unable to send.");
+    fprintf(stderr, "ERROR: Unable to send FIN");
     exit(1);
   }
 
@@ -151,17 +166,18 @@ int main(int argc, char* argv[]) {
       if (srv_fin_pkt.flags == (1 << 2)/*fin_ack_pkt.FIN == 1 && fin_ack_pkt.FIN_ACK == 1*/){
 	       struct packet* fin_ack_pkt = malloc(sizeof(struct packet));
 	       fin_ack_pkt->seq_num = fin_pkt->seq_num + 1;
-	       printf("%d\n", fin_ack_pkt->seq_num);
+	       printf("%d,", fin_ack_pkt->seq_num);
 	       fin_ack_pkt->ack_num = srv_fin_pkt.seq_num + 1;
-	       printf("%d\n", fin_ack_pkt->ack_num);
-	       fin_ack_pkt->flags = 1;
+	       printf(" %d\n", fin_ack_pkt->ack_num);
+	       fin_ack_pkt->flags = 1 << 2 + 1;
 	       //fin_ack_pkt->FIN=1;
 	       //fin_ack_pkt->FIN_ACK=1;
 	       if (sendto(sockfd, fin_ack_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
 		       serv_addr_len) < 0) {
-	            fprintf(stderr, "ERROR: Unable to send.");
+	            fprintf(stderr, "ERROR: Unable to send FIN ACK");
 	            exit(1);
 	       }
+         break;
       }
     }
   }

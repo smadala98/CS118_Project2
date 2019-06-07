@@ -23,6 +23,7 @@ FILE* fp;
 void sig_handler(int signo)
 {
   if (signo == SIGINT){
+    fprintf(stderr, "");
     fclose(fp);
     exit(0);
   }
@@ -78,7 +79,7 @@ int main(int argc, char* argv[]) {
     }
 
     char filename[16];
-    sprintf(filename, "%d.file", conn_num);
+    sprintf(filename, "%d.txt", conn_num);
     fp = fopen(filename, "w+");
 
     // Need to put this in a loop to receive multiple packets from client.
@@ -92,21 +93,23 @@ int main(int argc, char* argv[]) {
 	      cur_seq_num++;
         fin_ack_pkt.seq_num = cur_seq_num;
         fin_ack_pkt.ack_num = new_pkt.seq_num + 1;
-	// Set ACK for FIN packet sent from client.
+	      // Set ACK for FIN packet sent from client.
         fin_ack_pkt.flags = 1;
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
-	// Create FIN packet for server to send to client.
-	fin_ack_pkt.ack_num = 0;
-	// Set FIN bit.
-	fin_ack_pkt.flags = (1 << 2);
+	      // Create FIN packet for server to send to client.
+	      fin_ack_pkt.ack_num = 0;
+	      // Set FIN bit.
+	      fin_ack_pkt.flags = (1 << 2);
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
-	       break;
+
+      } else if (new_pkt.flags == (1 << 2 + 1)) {
+        break;
       }
 
       int payload_len=0;
