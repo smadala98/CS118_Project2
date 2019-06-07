@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
   while (!feof(fp)) {
     cwnd[cwnd_index + set_index] = malloc(sizeof(struct packet));
     memset(cwnd[cwnd_index + set_index]->payload, 0, 512);
-    fread(cwnd[cwnd_index + set_index]->payload, 1, 512, fp);
+    fread(cwnd[cwnd_index + set_index]->payload, 1, 511, fp);
     cwnd[cwnd_index + set_index]->seq_num = cur_seq_num + set_index + 1;
     set_index++;
   }
