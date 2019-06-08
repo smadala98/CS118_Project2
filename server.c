@@ -17,6 +17,8 @@ struct packet {
   int flags; // 1st bit is set for ACK, 2nd bit is set for SYN, 3rd bit is set for FIN
   char payload[512];
 };
+char *buffer;
+
 int if_file_close=0;
 int conn_num = 0;
 FILE* fp;
@@ -127,6 +129,7 @@ int main(int argc, char* argv[]) {
 
     // Need to put this in a loop to receive multiple packets from client.
     while(1) {
+      int buffer_length=0;
       struct packet new_pkt;
       struct timeval timeout = {10, 0};
       fd_set in_set;
@@ -171,7 +174,7 @@ int main(int argc, char* argv[]) {
 	  break;
 	}
       }
-
+      
       int payload_len=0;
       while(1) {
         if(new_pkt.payload[payload_len] == 0){
