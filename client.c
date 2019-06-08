@@ -209,7 +209,6 @@ int main(int argc, char* argv[]) {
 	            fprintf(stderr, "ERROR: Unable to send FIN ACK");
 	            exit(1);
 	       }
-         break;
       }
     }
   }
