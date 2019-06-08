@@ -124,12 +124,12 @@ int main(int argc, char* argv[]) {
     // Using not_sent_index prevents sending of duplicate packets, due to queuing of ACKs from server.
     while (cwnd_index != end_index) {
       for(; not_sent_index < cwnd_index + cwnd_size; not_sent_index++){
-	if (not_sent_index == end_index)
-	  break;
-	
+	      if (not_sent_index == end_index)
+	      break;
+
         cwnd[not_sent_index]->ack_num = cur_ack_num;
         cwnd[not_sent_index]->flags = 1;
-	final_seq_num = cwnd[not_sent_index]->seq_num;
+	      final_seq_num = cwnd[not_sent_index]->seq_num;
         if (sendto(sockfd, cwnd[not_sent_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
   	    fprintf(stderr, "ERROR: Unable to send packet.");
   	    exit(1);
@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
       recvfrom(sockfd, &ack_response_pkt, sizeof(ack_response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
       printf("%d, %d", ack_response_pkt.seq_num, ack_response_pkt.ack_num );
       slide_window(ack_response_pkt.ack_num);
-      
+
       /*if (ack_response_pkt.ack_num == doneseq+1){
          doneseq++;
          if (cwnd_size <= ssthresh){
@@ -167,7 +167,7 @@ int main(int argc, char* argv[]) {
       printf(" cwnd = %f, cwnd_size_h = %f\n", cwnd_size, cwnd_size_h);
     }
   }
-  
+
   struct packet* fin_pkt = malloc(sizeof(struct packet));
   cur_seq_num++;
   fin_pkt->seq_num = final_seq_num;
@@ -185,8 +185,18 @@ int main(int argc, char* argv[]) {
   if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == fin_pkt->seq_num + 1) {
     time_t cur_time = time(NULL);
     while(time(NULL) - cur_time < 2){
+      struct timeval timeout = {2, 0};
+      fd_set in_set;
       struct packet srv_fin_pkt;
-      recvfrom(sockfd, &srv_fin_pkt, sizeof(srv_fin_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+      FD_ZERO(&in_set);
+      FD_SET(sockfd, &in_set);
+      int cnt = select(sockfd + 1, &in_set, NULL, NULL, &timeout);
+      if(FD_ISSET(sockfd, &in_set)){
+        recvfrom(sockfd, &srv_fin_pkt, sizeof(srv_fin_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+      } else {
+        break;
+      }
+
       if (srv_fin_pkt.flags == (1 << 2)){
 	       struct packet* fin_ack_pkt = malloc(sizeof(struct packet));
 	       fin_ack_pkt->seq_num = fin_pkt->seq_num + 1;
