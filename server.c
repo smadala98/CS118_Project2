@@ -124,8 +124,8 @@ int main(int argc, char* argv[]) {
     }
 
     char filename[16];
-    sprintf(filename, "%d.txt", conn_num);
-    fp = fopen(filename, "w+");
+    sprintf(filename, "%d.data", conn_num);
+    fp = fopen(filename, "wb+");
 
     // Need to put this in a loop to receive multiple packets from client.
     while(1) {
