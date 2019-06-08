@@ -32,6 +32,44 @@ void sig_handler(int signo)
   }
 }
 
+void print_packet(struct packet pkt, int sent) {
+  char type[16];
+  memset(type, 0, 16);
+  char buf[10];
+  memset(buf, 0, 10);
+  int added = 0;
+  if (pkt.flags & 1) {
+    strcpy(buf, "ACK");
+    strcat(type, buf);
+    added = 1;
+  }
+  if (pkt.flags & (1 << 1)) {
+    if (added) {
+      strcpy(buf, " SYN");
+    } else {
+      strcpy(buf, "SYN");
+    }
+    strcat(type, buf);
+    added = 1;
+  }
+  if (pkt.flags & (1 << 2)) {
+    if (added) {
+      strcpy(buf, " FIN");
+    } else {
+      strcpy(buf, "FIN");
+    }
+    strcat(type, buf);
+    added = 1;
+  }
+
+  if (sent) {
+    printf("SEND %d %d 0 0 %s\n", pkt.seq_num, pkt.ack_num, type);
+  } else {
+    printf("RECV %d %d 0 0 %s\n", pkt.seq_num, pkt.ack_num, type);
+  }
+}
+
+
 int main(int argc, char* argv[]) {
 
   if (signal(SIGQUIT, sig_handler) == SIG_ERR){
@@ -63,7 +101,7 @@ int main(int argc, char* argv[]) {
     if_file_close=0;
     struct packet client_pkt;
     recvfrom(sockfd, &client_pkt, sizeof(client_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
-    printf("%d, %d\n", client_pkt.seq_num, client_pkt.ack_num);
+    print_packet(client_pkt, 0);
 
     // Check if SYN bit is set.
     if (client_pkt.flags == (1 << 1)) {
@@ -79,7 +117,8 @@ int main(int argc, char* argv[]) {
 	         cli_addr_len) < 0) {
              fprintf(stderr, "ERROR: Unable to send.\n");
              exit(1);
-          }
+      }
+      print_packet(syn_ack_pkt, 1);
     }
 
     char filename[16];
@@ -100,11 +139,11 @@ int main(int argc, char* argv[]) {
       } else {
         break;
       }
-
+      print_packet(new_pkt, 0);
       // Check if received FIN bit.
       if (new_pkt.flags == (1 << 2)){
         struct packet fin_ack_pkt;
-	      cur_seq_num++;
+	cur_seq_num++;
         fin_ack_pkt.seq_num = cur_seq_num;
         fin_ack_pkt.ack_num = new_pkt.seq_num + 1;
 	      // Set ACK for FIN packet sent from client.
@@ -113,25 +152,27 @@ int main(int argc, char* argv[]) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
-	      // Create FIN packet for server to send to client.
-	      fin_ack_pkt.ack_num = 0;
-	      // Set FIN bit.
-	      fin_ack_pkt.flags = (1 << 2);
+	print_packet(fin_ack_pkt, 1);
+	// Create FIN packet for server to send to client.
+	fin_ack_pkt.ack_num = 0;
+	// Set FIN bit.
+	fin_ack_pkt.flags = (1 << 2);
         if (sendto(sockfd, &fin_ack_pkt, sizeof(fin_ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
               fprintf(stderr, "ERROR: Unable to send.\n");
               exit(1);
         }
+	print_packet(fin_ack_pkt, 1);
 
-	      // Need to receive FIN ACK from client.
-	      recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
-	      // Add timer here, once FIN ACK is received, server can end connection.
-	      if (new_pkt.flags == 1 && new_pkt.ack_num == fin_ack_pkt.seq_num + 1) {
-	         break;
-	      }
+	// Need to receive FIN ACK from client.
+	recvfrom(sockfd, &new_pkt, sizeof(new_pkt), 0, (struct sockaddr *) &cli_addr, &cli_addr_len);
+	print_packet(new_pkt, 0);
+	// Add timer here, once FIN ACK is received, server can end connection.
+	if (new_pkt.flags == 1 && new_pkt.ack_num == fin_ack_pkt.seq_num + 1) {
+	  break;
+	}
       }
 
       int payload_len=0;
-      printf("%s\n", new_pkt.payload);
       while(1) {
         if(new_pkt.payload[payload_len] == 0){
           break;
@@ -144,10 +185,12 @@ int main(int argc, char* argv[]) {
       struct packet ack_pkt;
       ack_pkt.seq_num = cur_seq_num;
       ack_pkt.ack_num = new_pkt.seq_num + 1;
+      ack_pkt.flags = 1;
       if (sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
 	     fprintf(stderr, "ERROR: Unable to send.\n");
 	     exit(1);
       }
+      print_packet(ack_pkt, 1);
     }
     fclose(fp);
     if_file_close=1;

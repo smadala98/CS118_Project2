@@ -26,6 +26,45 @@ double cwnd_size = 1;
 double cwnd_size_h = 0;
 double ssthresh = 10;
 
+clock_t time_pkt_sent_at;
+
+void print_packet(struct packet pkt, int sent) {
+  char type[16];
+  memset(type, 0, 16);
+  char buf[10];
+  memset(buf, 0, 10);
+  int added = 0;
+  if (pkt.flags & 1) {
+    strcpy(buf, "ACK");
+    strcat(type, buf);
+    added = 1;
+  }
+  if (pkt.flags & (1 << 1)) {
+    if (added) {
+      strcpy(buf, " SYN");
+    } else {
+      strcpy(buf, "SYN");
+    }
+    strcat(type, buf);
+    added = 1;
+  }
+  if (pkt.flags & (1 << 2)) {
+    if (added) {
+      strcpy(buf, " FIN");
+    } else {
+      strcpy(buf, "FIN");
+    }
+    strcat(type, buf);
+    added = 1;
+  }
+
+  if (sent) {
+    printf("SEND %d %d %.0f %.0f %s\n", pkt.seq_num, pkt.ack_num, (cwnd_size + cwnd_size_h) * 512, ssthresh * 512, type);
+  } else {
+    printf("RECV %d %d %.0f %.0f %s\n", pkt.seq_num, pkt.ack_num, (cwnd_size + cwnd_size_h) * 512, ssthresh * 512, type);
+  }
+}
+
 void slide_window(int ack_received) {
   for (int i = 0; i < cwnd_size; i++) {
     if (cwnd_index >= end_index)
@@ -100,8 +139,9 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "ERROR: Unable to send handshake.");
     exit(1);
   }
+  print_packet(*syn_pkt, 1);  
 
-  int    set_index = 0;
+  int set_index = 0;
   while (!feof(fp)) {
     cwnd[cwnd_index + set_index] = malloc(sizeof(struct packet));
     memset(cwnd[cwnd_index + set_index]->payload, 0, 512);
@@ -114,7 +154,7 @@ int main(int argc, char* argv[]) {
 
   struct packet response_pkt;
   recvfrom(sockfd, &response_pkt, sizeof(response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
-  printf("%d, %d\n", response_pkt.seq_num, response_pkt.ack_num );
+  print_packet(response_pkt, 0);
   int final_seq_num = 0;
   // Check if three-way handshake has completed by check if SYN and ACK flags are set.
   if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
@@ -134,11 +174,13 @@ int main(int argc, char* argv[]) {
   	    fprintf(stderr, "ERROR: Unable to send packet.");
   	    exit(1);
         }
+	print_packet(*cwnd[not_sent_index], 1);
+
       }
 
       struct packet ack_response_pkt;
       recvfrom(sockfd, &ack_response_pkt, sizeof(ack_response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
-      printf("%d, %d", ack_response_pkt.seq_num, ack_response_pkt.ack_num );
+      print_packet(ack_response_pkt, 0);
       slide_window(ack_response_pkt.ack_num);
       
       /*if (ack_response_pkt.ack_num == doneseq+1){
@@ -164,7 +206,7 @@ int main(int argc, char* argv[]) {
           }
         }
 	}*/
-      printf(" cwnd = %f, cwnd_size_h = %f\n", cwnd_size, cwnd_size_h);
+      //      printf(" cwnd = %f, cwnd_size_h = %f\n", cwnd_size, cwnd_size_h);
     }
   }
   
@@ -179,26 +221,28 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "ERROR: Unable to send FIN");
     exit(1);
   }
+  print_packet(*fin_pkt, 1);
 
   struct packet srv_fin_ack_pkt;
   recvfrom(sockfd, &srv_fin_ack_pkt, sizeof(srv_fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+  print_packet(srv_fin_ack_pkt, 0);
   if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == fin_pkt->seq_num + 1) {
     time_t cur_time = time(NULL);
     while(time(NULL) - cur_time < 2){
       struct packet srv_fin_pkt;
       recvfrom(sockfd, &srv_fin_pkt, sizeof(srv_fin_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+      print_packet(srv_fin_pkt, 0);
       if (srv_fin_pkt.flags == (1 << 2)){
 	       struct packet* fin_ack_pkt = malloc(sizeof(struct packet));
 	       fin_ack_pkt->seq_num = fin_pkt->seq_num + 1;
-	       printf("%d,", fin_ack_pkt->seq_num);
 	       fin_ack_pkt->ack_num = srv_fin_pkt.seq_num + 1;
-	       printf(" %d\n", fin_ack_pkt->ack_num);
 	       fin_ack_pkt->flags = 1;
 	       if (sendto(sockfd, fin_ack_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
 		       serv_addr_len) < 0) {
 	            fprintf(stderr, "ERROR: Unable to send FIN ACK");
 	            exit(1);
 	       }
+	       print_packet(*fin_ack_pkt, 1);
          break;
       }
     }
