@@ -141,29 +141,7 @@ int main(int argc, char* argv[]) {
       printf("%d, %d", ack_response_pkt.seq_num, ack_response_pkt.ack_num );
       slide_window(ack_response_pkt.ack_num);
 
-      /*if (ack_response_pkt.ack_num == doneseq+1){
-         doneseq++;
-         if (cwnd_size <= ssthresh){
-           cwnd_size++;
-         }else{
-           cwnd_size_h+=(double)(1/cwnd_size);
-           if (cwnd_size_h==1){
-             cwnd_size++;
-             cwnd_size_h=0;
-           }
-         }
-      } else if (ack_response_pkt.ack_num == doneseq){
-        dupacks++;
-        if (dupacks == 2){
-          ssthresh=(int)(ssthresh/2);
-          cwnd[doneseq+1]->ack_num = doneseq+1;
-          cwnd[doneseq+1]->flags = 1;
-          if (sendto(sockfd, cwnd[doneseq+1], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
-    	       fprintf(stderr, "ERROR: Unable to send packet.");
-    	       exit(1);
-          }
-        }
-	}*/
+
       printf(" cwnd = %f, cwnd_size_h = %f\n", cwnd_size, cwnd_size_h);
     }
   }
@@ -181,8 +159,28 @@ int main(int argc, char* argv[]) {
   }
 
   struct packet srv_fin_ack_pkt;
-  recvfrom(sockfd, &srv_fin_ack_pkt, sizeof(srv_fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
-  if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == fin_pkt->seq_num + 1) {
+  while(1){
+    struct timeval timeout = {0.5, 0};
+    fd_set in_set;
+    struct packet srv_fin_pkt;
+    FD_ZERO(&in_set);
+    FD_SET(sockfd, &in_set);
+    int cnt = select(sockfd + 1, &in_set, NULL, NULL, &timeout);
+    if(FD_ISSET(sockfd, &in_set)){
+      recvfrom(sockfd, &srv_fin_ack_pkt, sizeof(srv_fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+      if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == fin_pkt->seq_num + 1) {
+        break;
+      }
+    } else {
+      if (sendto(sockfd, fin_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
+    	     serv_addr_len) < 0) {
+        fprintf(stderr, "ERROR: Unable to send FIN");
+        exit(1);
+      }
+    }
+  }
+
+
     time_t cur_time = time(NULL);
     while(time(NULL) - cur_time < 2){
       struct timeval timeout = {2, 0};
@@ -211,7 +209,7 @@ int main(int argc, char* argv[]) {
 	       }
       }
     }
-  }
+
 
   close(sockfd);
 }
