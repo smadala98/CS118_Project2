@@ -67,7 +67,7 @@ void print_packet(struct packet pkt, int sent) {
   if (sent) {
     printf("SEND %d %d 0 0 %s\n", pkt.seq_num, pkt.ack_num, type);
   } else {
-    printf("RECV %d %d 0 0 %s\n", pkt.seq_num, pkt.ack_num, type);
+    printf("RECV %d 0 0 0 %s\n", pkt.seq_num, type);
   }
 }
 
@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
       if_file_close=0;
       struct packet syn_ack_pkt;
       syn_ack_pkt.seq_num = rand() % 25600;
-      cur_seq_num = syn_ack_pkt.seq_num;
+      cur_seq_num = syn_ack_pkt.seq_num+1;
       syn_ack_pkt.ack_num = client_pkt.seq_num + 1;
       // Set SYN and ACK bit.
       syn_ack_pkt.flags = (1 << 1) + 1;
@@ -146,7 +146,6 @@ int main(int argc, char* argv[]) {
       // Check if received FIN bit.
       if (new_pkt.flags == (1 << 2)){
         struct packet fin_ack_pkt;
-	cur_seq_num++;
         fin_ack_pkt.seq_num = cur_seq_num;
         fin_ack_pkt.ack_num = new_pkt.seq_num + 1;
 	      // Set ACK for FIN packet sent from client.
@@ -174,7 +173,7 @@ int main(int argc, char* argv[]) {
 	  break;
 	}
       }
-      
+
       int payload_len=0;
       while(1) {
         if(new_pkt.payload[payload_len] == 0){
@@ -183,11 +182,10 @@ int main(int argc, char* argv[]) {
         payload_len++;
       }
       fwrite(new_pkt.payload, sizeof(char), payload_len, fp);
-      cur_seq_num++;
       // Send ACK packet for the client packet received to the client.
       struct packet ack_pkt;
       ack_pkt.seq_num = cur_seq_num;
-      ack_pkt.ack_num = new_pkt.seq_num + 1;
+      ack_pkt.ack_num = new_pkt.seq_num + 512;
       ack_pkt.flags = 1;
       if (sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
 	     fprintf(stderr, "ERROR: Unable to send.\n");

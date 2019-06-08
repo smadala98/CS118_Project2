@@ -59,7 +59,7 @@ void print_packet(struct packet pkt, int sent) {
   }
 
   if (sent) {
-    printf("SEND %d %d %.0f %.0f %s\n", pkt.seq_num, pkt.ack_num, (cwnd_size + cwnd_size_h) * 512, ssthresh * 512, type);
+    printf("SEND %d 0 %.0f %.0f %s\n", pkt.seq_num, (cwnd_size + cwnd_size_h) * 512, ssthresh * 512, type);
   } else {
     printf("RECV %d %d %.0f %.0f %s\n", pkt.seq_num, pkt.ack_num, (cwnd_size + cwnd_size_h) * 512, ssthresh * 512, type);
   }
@@ -131,7 +131,7 @@ int main(int argc, char* argv[]) {
   struct packet* syn_pkt = malloc(sizeof(struct packet));
   srand(time(0));  // Seeds based off current time.
   syn_pkt->seq_num = rand() % 25600;  // Guarantees that seq_num does not exceed 25600.
-  cur_seq_num = syn_pkt->seq_num;
+  cur_seq_num = syn_pkt->seq_num+1;
   syn_pkt->ack_num = 0;
   syn_pkt->flags = (1 << 1);  // Sets SYN flag.
   if (sendto(sockfd, syn_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
@@ -139,14 +139,21 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "ERROR: Unable to send handshake.");
     exit(1);
   }
-  print_packet(*syn_pkt, 1);  
+  print_packet(*syn_pkt, 1);
 
   int set_index = 0;
+  int buffer=0;
   while (!feof(fp)) {
     cwnd[cwnd_index + set_index] = malloc(sizeof(struct packet));
     memset(cwnd[cwnd_index + set_index]->payload, 0, 512);
     fread(cwnd[cwnd_index + set_index]->payload, 1, 511, fp);
-    cwnd[cwnd_index + set_index]->seq_num = cur_seq_num + set_index + 1;
+    //if (cur_seq_num + set_index*512 > 25600){
+      //cwnd[cwnd_index + set_index]->seq_num = 0;
+      //buffer=set_index;
+      //cur_seq_num=0;
+    //}else {
+      cwnd[cwnd_index + set_index]->seq_num = cur_seq_num + (set_index-buffer)*512;
+    //}
     set_index++;
   }
   end_index = cwnd_index + set_index;
@@ -158,7 +165,7 @@ int main(int argc, char* argv[]) {
   int final_seq_num = 0;
   // Check if three-way handshake has completed by check if SYN and ACK flags are set.
   if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
-    cur_ack_num = response_pkt.seq_num + 1;
+    cur_ack_num = response_pkt.seq_num + 512;
     //    int doneseq=0;
     //    int dupacks=0;
     // Using not_sent_index prevents sending of duplicate packets, due to queuing of ACKs from server.
@@ -174,7 +181,7 @@ int main(int argc, char* argv[]) {
   	    fprintf(stderr, "ERROR: Unable to send packet.");
   	    exit(1);
         }
-	print_packet(*cwnd[not_sent_index], 1);
+	      print_packet(*cwnd[not_sent_index], 1);
 
       }
 
@@ -244,8 +251,8 @@ int main(int argc, char* argv[]) {
       fin_ack_pkt->flags = 1;
       if (sendto(sockfd, fin_ack_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
 		 serv_addr_len) < 0) {
-	fprintf(stderr, "ERROR: Unable to send FIN ACK");
-	exit(1);
+	      fprintf(stderr, "ERROR: Unable to send FIN ACK");
+	      exit(1);
       }
       print_packet(*fin_ack_pkt, 1);
       }
