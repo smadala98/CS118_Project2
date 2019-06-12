@@ -14,7 +14,8 @@
 struct packet {
   int seq_num;
   int ack_num;
-  int flags; // 1st bit is set for ACK, 2nd bit is set for SYN, 3rd bit is set for FIN
+  short flags; // 1st bit is set for ACK, 2nd bit is set for SYN, 3rd bit is set for FIN
+  short length;
   char payload[512];
 };
 char *buffer;
@@ -172,20 +173,21 @@ int main(int argc, char* argv[]) {
 	if (new_pkt.flags == 1 && new_pkt.ack_num == fin_ack_pkt.seq_num + 1) {
 	  break;
 	}
+	printf("Ended connection.");
       }
 
-      int payload_len=0;
+      /*      int payload_len=0;
       while(1) {
         if(new_pkt.payload[payload_len] == 0){
           break;
         }
         payload_len++;
-      }
-      fwrite(new_pkt.payload, sizeof(char), payload_len, fp);
+	}*/
+      fwrite(new_pkt.payload, sizeof(char), new_pkt.length, fp);
       // Send ACK packet for the client packet received to the client.
       struct packet ack_pkt;
       ack_pkt.seq_num = cur_seq_num;
-      ack_pkt.ack_num = new_pkt.seq_num + 512;
+      ack_pkt.ack_num = new_pkt.seq_num + new_pkt.length;
       ack_pkt.flags = 1;
       if (sendto(sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &cli_addr, cli_addr_len) < 0) {
 	     fprintf(stderr, "ERROR: Unable to send.\n");

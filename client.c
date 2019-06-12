@@ -14,7 +14,8 @@
 struct packet {
   int seq_num;
   int ack_num;
-  int flags; // If ACK 1st bit is set, SYN 2nd bit is set, FIN 3rd bit is set
+  short flags; // If ACK 1st bit is set, SYN 2nd bit is set, FIN 3rd bit is set
+  short length;
   char payload[512];
 };
 
@@ -66,11 +67,14 @@ void print_packet(struct packet pkt, int sent) {
 }
 
 void slide_window(int ack_received) {
+  int cwnd_size_increased = 0;
   for (int i = 0; i < cwnd_size; i++) {
-    if (cwnd_index >= end_index)
+    if (cwnd_index + i >= end_index)
       break;
-    if (cwnd[cwnd_index]->seq_num < ack_received) {
-      if (cwnd[cwnd_index]->seq_num == ack_received - 1) {
+    //    printf("ack: %d, seq_num: %d\n", ack_received, cwnd[i + cwnd_index]->seq_num);
+    if (ack_received == cwnd[i + cwnd_index]->seq_num + cwnd[i + cwnd_index]->length) {
+      if (!cwnd_size_increased && cwnd_size < 20) {
+	cwnd_size_increased = 1;
 	// Increments cwnd.
 	if (cwnd_size < ssthresh) {
 	  cwnd_size++;
@@ -83,11 +87,40 @@ void slide_window(int ack_received) {
 	  }
 	}
       }
+      if (cwnd_size > 20)
+	cwnd_size = 20;
+      for (int j = 0; j < i; j++) {
+	free(cwnd[cwnd_index]);
+	cwnd_index++;
+      }
+    }
+  }
+  
+  /*  for (int i = 0; i < cwnd_size; i++) {
+    if (cwnd_index >= end_index)
+      break;
+    if (cwnd[cwnd_index]->seq_num < ack_received) {
+      if (!cwnd_size_increased && cwnd_size < 20) {
+	cwnd_size_increased = 1;
+	// Increments cwnd.
+	if (cwnd_size < ssthresh) {
+	  cwnd_size++;
+	} else {
+	  cwnd_size_h += (double)1/cwnd_size;
+	  // Have to compare this way due to floating point error.
+	  if (fabs(cwnd_size_h - 1) < 0.0001) {
+	    cwnd_size++;
+	    cwnd_size_h = 0;
+	  }
+	}
+      }
+      if (cwnd_size > 20)
+	cwnd_size = 20;
       free(cwnd[cwnd_index]);
       cwnd_index++;
       i--;
     }
-  }
+    }*/
 }
 
 int main(int argc, char* argv[]) {
@@ -146,13 +179,18 @@ int main(int argc, char* argv[]) {
   while (!feof(fp)) {
     cwnd[cwnd_index + set_index] = malloc(sizeof(struct packet));
     memset(cwnd[cwnd_index + set_index]->payload, 0, 512);
-    fread(cwnd[cwnd_index + set_index]->payload, 1, 511, fp);
+    int bytes_read = fread(cwnd[cwnd_index + set_index]->payload, 1, 512, fp);
     //if (cur_seq_num + set_index*512 > 25600){
       //cwnd[cwnd_index + set_index]->seq_num = 0;
       //buffer=set_index;
       //cur_seq_num=0;
     //}else {
-      cwnd[cwnd_index + set_index]->seq_num = cur_seq_num + (set_index-buffer)*512;
+    cwnd[cwnd_index + set_index]->seq_num = cur_seq_num;
+    cwnd[cwnd_index + set_index]->length = bytes_read;
+    cur_seq_num += bytes_read;
+    if (cur_seq_num > 25600) {
+      cur_seq_num %= 25600;
+    }
     //}
     set_index++;
   }
@@ -165,36 +203,36 @@ int main(int argc, char* argv[]) {
   int final_seq_num = 0;
   // Check if three-way handshake has completed by check if SYN and ACK flags are set.
   if (response_pkt.flags == (1 << 1) + 1 && response_pkt.ack_num - 1 == syn_pkt->seq_num) {
-    cur_ack_num = response_pkt.seq_num + 512;
-    //    int doneseq=0;
-    //    int dupacks=0;
     // Using not_sent_index prevents sending of duplicate packets, due to queuing of ACKs from server.
     while (cwnd_index != end_index) {
       for(; not_sent_index < cwnd_index + cwnd_size; not_sent_index++){
-	      if (not_sent_index == end_index)
-	      break;
+	if (not_sent_index == end_index)
+	  break;
 
-        cwnd[not_sent_index]->ack_num = cur_ack_num;
-        cwnd[not_sent_index]->flags = 1;
-	      final_seq_num = cwnd[not_sent_index]->seq_num;
+	if (not_sent_index == 0)
+	  cwnd[not_sent_index]->ack_num = response_pkt.ack_num + 1;
+	else
+	  cwnd[not_sent_index]->ack_num = 0;
+        cwnd[not_sent_index]->flags = 0;
+	final_seq_num = cwnd[not_sent_index]->seq_num;
         if (sendto(sockfd, cwnd[not_sent_index], sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr, serv_addr_len) < 0) {
-  	    fprintf(stderr, "ERROR: Unable to send packet.");
-  	    exit(1);
+	  fprintf(stderr, "ERROR: Unable to send packet.");
+	  exit(1);
         }
-	      print_packet(*cwnd[not_sent_index], 1);
-
+	print_packet(*cwnd[not_sent_index], 1);      
       }
 
       struct packet ack_response_pkt;
       recvfrom(sockfd, &ack_response_pkt, sizeof(ack_response_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
       print_packet(ack_response_pkt, 0);
       slide_window(ack_response_pkt.ack_num);
+      if (ack_response_pkt.ack_num == cur_seq_num)
+	break;
     }
   }
 
   struct packet* fin_pkt = malloc(sizeof(struct packet));
-  cur_seq_num++;
-  fin_pkt->seq_num = final_seq_num;
+  fin_pkt->seq_num = cur_seq_num;
   fin_pkt->ack_num = 0;
   fin_pkt->flags = (1 << 2);
 
@@ -206,7 +244,7 @@ int main(int argc, char* argv[]) {
   print_packet(*fin_pkt, 1);
 
   struct packet srv_fin_ack_pkt;
-  while(1) {
+  /*  while(1) {
     struct timeval timeout = {0.5, 0};
     fd_set in_set;
     struct packet srv_fin_pkt;
@@ -226,38 +264,38 @@ int main(int argc, char* argv[]) {
         exit(1);
       }
     }
+    }*/
+  recvfrom(sockfd, &srv_fin_ack_pkt, sizeof(srv_fin_ack_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+  print_packet(srv_fin_ack_pkt, 0);
+  if (srv_fin_ack_pkt.flags == 1 && srv_fin_ack_pkt.ack_num == fin_pkt->seq_num + 1) {
+
+    while(1) {
+      struct timeval timeout = {2, 0};
+      fd_set in_set;
+      struct packet srv_fin_pkt;
+      FD_ZERO(&in_set);
+      FD_SET(sockfd, &in_set);
+      int cnt = select(sockfd + 1, &in_set, NULL, NULL, &timeout);
+      if(FD_ISSET(sockfd, &in_set)){
+	recvfrom(sockfd, &srv_fin_pkt, sizeof(srv_fin_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
+	print_packet(srv_fin_pkt, 0);
+      } else {
+	break;
+      }
+      
+      if (srv_fin_pkt.flags == (1 << 2)){
+	struct packet* fin_ack_pkt = malloc(sizeof(struct packet));
+	fin_ack_pkt->seq_num = fin_pkt->seq_num + 1;
+	fin_ack_pkt->ack_num = srv_fin_pkt.seq_num + 1;
+	fin_ack_pkt->flags = 1;
+	if (sendto(sockfd, fin_ack_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
+		   serv_addr_len) < 0) {
+	  fprintf(stderr, "ERROR: Unable to send FIN ACK");
+	  exit(1);
+	}
+	print_packet(*fin_ack_pkt, 1);
+      }
+    }
   }
-
-
-  time_t cur_time = time(NULL);
-  while(time(NULL) - cur_time < 2) {
-    struct timeval timeout = {2, 0};
-    fd_set in_set;
-    struct packet srv_fin_pkt;
-    FD_ZERO(&in_set);
-    FD_SET(sockfd, &in_set);
-    int cnt = select(sockfd + 1, &in_set, NULL, NULL, &timeout);
-    if(FD_ISSET(sockfd, &in_set)){
-      recvfrom(sockfd, &srv_fin_pkt, sizeof(srv_fin_pkt), 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
-      print_packet(srv_fin_pkt, 0);
-    } else {
-      break;
-    }
-
-    if (srv_fin_pkt.flags == (1 << 2)){
-      struct packet* fin_ack_pkt = malloc(sizeof(struct packet));
-      fin_ack_pkt->seq_num = fin_pkt->seq_num + 1;
-      fin_ack_pkt->ack_num = srv_fin_pkt.seq_num + 1;
-      fin_ack_pkt->flags = 1;
-      if (sendto(sockfd, fin_ack_pkt, sizeof(struct packet), 0, (const struct sockaddr *) &serv_addr,
-		 serv_addr_len) < 0) {
-	      fprintf(stderr, "ERROR: Unable to send FIN ACK");
-	      exit(1);
-      }
-      print_packet(*fin_ack_pkt, 1);
-      }
-    }
-
-
   close(sockfd);
 }
